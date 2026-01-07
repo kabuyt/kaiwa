@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="apple-touch-icon" href="icon.png">
+    <link rel="icon" href="icon.png">
+    <title>トマト かいわ N5</title>
+    <style>
+        body {
+            font-family: 'Hiragino Kaku Gothic ProN', Arial, sans-serif;
+            background-color: #7494C0; /* LINEっぽい背景色 */
+            margin: 0; padding: 0;
+            display: flex; flex-direction: column; height: 100vh;
+            user-select: none;
+        }
+
+        /* ヘッダー */
+        header {
+            background: #2c3e50; color: white; padding: 15px; text-align: center;
+            font-weight: bold; position: fixed; top: 0; width: 100%; z-index: 10;
+            font-size: 18px;
+        }
+
+        /* チャットエリア */
+        #chat-area {
+            flex: 1; margin-top: 60px; margin-bottom: 240px; padding: 15px;
+            overflow-y: auto; display: flex; flex-direction: column; gap: 15px;
+        }
+
+        /* 吹き出し（相手） */
+        .bubble-left {
+            align-self: flex-start; background: white; padding: 12px 16px;
+            border-radius: 15px; border-top-left-radius: 2px;
+            max-width: 80%; position: relative;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            font-size: 16px; line-height: 1.4;
+        }
+        .bubble-left::before {
+            content: "たなか さん (上司)"; position: absolute; top: -20px; left: 0;
+            font-size: 11px; color: white;
+        }
+
+        /* 吹き出し（自分） */
+        .bubble-right {
+            align-self: flex-end; background: #85E249; padding: 12px 16px;
+            border-radius: 15px; border-top-right-radius: 2px;
+            max-width: 80%;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            animation: popIn 0.3s;
+            font-size: 16px; line-height: 1.4;
+        }
+
+        /* 操作エリア */
+        #control-area {
+            position: fixed; bottom: 0; width: 100%;
+            background: #eee; padding: 15px; box-sizing: border-box;
+            border-top: 1px solid #ccc;
+            height: 240px; /* 固定高さ */
+            display: flex; flex-direction: column;
+        }
+
+        .situation-text {
+            font-size: 14px; color: #555; margin-bottom: 8px; text-align: center;
+            background: #fff; padding: 5px; border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        #choices-container {
+            flex: 1; overflow-y: auto; /* 選択肢が多い時はスクロール */
+        }
+
+        .choice-btn {
+            display: block; width: 100%; padding: 12px; margin-bottom: 8px;
+            background: white; border: 2px solid #ddd; border-radius: 10px;
+            font-size: 16px; font-weight: bold; color: #333; text-align: left;
+            cursor: pointer;
+        }
+        .choice-btn:active { background: #EF5350; color: white; border-color: #EF5350; }
+
+        /* 次へボタン */
+        #next-btn {
+            display: none; width: 100%; padding: 15px;
+            background: #EF5350; color: white; border: none; border-radius: 10px;
+            font-size: 18px; font-weight: bold; margin-top: 10px;
+        }
+
+        @keyframes popIn { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+    </style>
+</head>
+<body>
+
+    <header>かいわ の れんしゅう</header>
+
+    <div id="chat-area">
+        </div>
+
+    <div id="control-area">
+        <div id="situation" class="situation-text"></div>
+        <div id="choices-container"></div>
+        <button id="next-btn" onclick="nextScene()">つぎへ (Tiếp theo)</button>
+    </div>
+
+    <script>
+        // ★ シナリオデータ（すべてひらがな・カタカナ + スペース）
+        const scenarios = [
+            {
+                id: 1,
+                situation: "あさ、こうじょうに つきました。 たなかさんが います。",
+                manager_say: "おはよう。 はやいね。",
+                manager_audio: "おはよう。はやいね。",
+                choices: [
+                    { text: "おはよう ございます。", score: 10, feedback: "⭕️ いい あいさつ です！" },
+                    { text: "おはよう。", score: 0, feedback: "❌ ともだちじゃ ないです。「ございます」を つけましょう。" },
+                    { text: "こんにちは。", score: 5, feedback: "🔺 あさは 「おはようございます」 です。" }
+                ]
+            },
+            {
+                id: 2,
+                situation: "しごとちゅう、 たなかさんが はやくちで はなしました。",
+                manager_say: "これと あれを さきに やっといて！（はやくち）",
+                manager_audio: "これとあれをさきにやっといて！",
+                choices: [
+                    { text: "はい、わかりました。（わかっていない）", score: 0, feedback: "❌ きけんです！ わからないときは ききましょう。" },
+                    { text: "すみません、もういちど おねがいします。", score: 10, feedback: "⭕️ すばらしい！ わかるまで きくのが 正しいです。" },
+                    { text: "え？", score: 2, feedback: "🔺 しつれいです。「すみません」と いいましょう。" }
+                ]
+            },
+            {
+                id: 3,
+                situation: "あした、 びょういんへ いきたいです。",
+                manager_say: "あしたの しごとの ことだけど…",
+                manager_audio: "あしたのしごとのことだけど…",
+                choices: [
+                    { text: "あした びょういんです。", score: 5, feedback: "🔺 「びょういんが どうしたの？」と おもわれます。" },
+                    { text: "あした やすみます。", score: 5, feedback: "🔺 りゆう（なんで？）を いいましょう。" },
+                    { text: "すみません。あした びょういんへ いきたいんですが…", score: 10, feedback: "⭕️ かんぺきです！ 「〜んですが」は べんりです。" }
+                ]
+            },
+            {
+                id: 4,
+                situation: "コンビニで かいものを しています。",
+                manager_say: "ふくろは ごりようですか？（いりますか？）",
+                manager_audio: "ふくろは ごりようですか？",
+                choices: [
+                    { text: "はい、おねがいします。", score: 10, feedback: "⭕️ ほしいときは こう いいます。" },
+                    { text: "いらない。", score: 2, feedback: "🔺 ちょっと こわいです。「けっこうです」と いいましょう。" },
+                    { text: "けっこうです。（いりません）", score: 10, feedback: "⭕️ いらないときは 「けっこうです」が いいです。" }
+                ]
+            }
+        ];
+
+        let currentSceneIndex = 0;
+
+        window.onload = loadScene;
+
+        function loadScene() {
+            if (currentSceneIndex >= scenarios.length) {
+                // 終了画面
+                document.getElementById('chat-area').innerHTML += `
+                    <div style="text-align:center; margin-top:20px;">
+                        <h2>おつかれさま！🎉</h2>
+                        <p>ぜんぶ おわりました。</p>
+                        <button onclick="location.reload()" style="padding:10px 20px; font-size:16px;">もういちど</button>
+                    </div>
+                `;
+                document.getElementById('control-area').style.display = 'none';
+                return;
+            }
+
+            const data = scenarios[currentSceneIndex];
+            const chatArea = document.getElementById('chat-area');
+            const choicesContainer = document.getElementById('choices-container');
+            const nextBtn = document.getElementById('next-btn');
+            const situation = document.getElementById('situation');
+
+            // リセット
+            if (currentSceneIndex === 0) chatArea.innerHTML = ""; // 最初だけクリア
+            choicesContainer.style.display = "block";
+            nextBtn.style.display = "none";
+            situation.innerText = "シチュエーション: " + data.situation;
+
+            // 1. 少し待ってから相手が話す
+            setTimeout(() => {
+                addBubble(data.manager_say, "left");
+                speak(data.manager_audio);
+            }, 600);
+
+            // 2. 選択肢を表示
+            choicesContainer.innerHTML = "";
+            data.choices.forEach(choice => {
+                let btn = document.createElement("button");
+                btn.className = "choice-btn";
+                btn.innerText = choice.text;
+                btn.onclick = () => makeChoice(choice);
+                choicesContainer.appendChild(btn);
+            });
+        }
+
+        function addBubble(text, side) {
+            const chatArea = document.getElementById('chat-area');
+            const div = document.createElement("div");
+            div.className = side === "left" ? "bubble-left" : "bubble-right";
+            div.innerText = text;
+            chatArea.appendChild(div);
+            // 自動スクロール
+            setTimeout(() => {
+                chatArea.scrollTop = chatArea.scrollHeight; 
+            }, 100);
+        }
+
+        function makeChoice(choice) {
+            // 自分の発言を表示
+            addBubble(choice.text, "right");
+            speak(choice.text); // 自分も発音してみる
+
+            // 選択肢を消す
+            const choicesContainer = document.getElementById('choices-container');
+            choicesContainer.innerHTML = "";
+            
+            // フィードバック（上司からの返信風）
+            setTimeout(() => {
+                addBubble(choice.feedback, "left");
+                
+                // 次へボタン表示
+                document.getElementById('next-btn').style.display = "block";
+            }, 1000);
+        }
+
+        function nextScene() {
+            currentSceneIndex++;
+            loadScene();
+        }
+
+        function speak(text) {
+            window.speechSynthesis.cancel();
+            const uttr = new SpeechSynthesisUtterance(text);
+            uttr.lang = "ja-JP";
+            uttr.rate = 1.0;
+            window.speechSynthesis.speak(uttr);
+        }
+    </script>
+</body>
+</html>
